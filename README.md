@@ -133,7 +133,7 @@ pip install -r requirements.txt
 | Файл | Назначение |
 |------|------------|
 | `dist\MD-Converter.exe` | Portable-запуск без установки |
-| `dist\installer\MD-Converter-Setup-1.0.0.exe` | Инсталлятор для пользователей |
+| `dist\installer\MD-Converter-Setup-1.0.1.exe` | Инсталлятор для пользователей |
 
 Инсталлятор:
 

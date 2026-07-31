@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 APP_NAME = "MD-Converter"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 WINDOW_TITLE = f"{APP_NAME} — DOCX/XLSX/PDF → Markdown"
 WINDOW_MIN_WIDTH = 920
 WINDOW_MIN_HEIGHT = 680
