@@ -1,9 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for MD-Converter (Windows)
 
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
+ROOT = Path(SPECPATH)
 
 datas = []
 binaries = []
@@ -14,6 +17,14 @@ tmp_ret = collect_all("customtkinter")
 datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
+
+# App icon (window + taskbar when frozen)
+_icon_ico = ROOT / "assets" / "logo.ico"
+_icon_png = ROOT / "assets" / "logo.png"
+if _icon_ico.is_file():
+    datas.append((str(_icon_ico), "assets"))
+if _icon_png.is_file():
+    datas.append((str(_icon_png), "assets"))
 
 a = Analysis(
     ["main.py"],
@@ -61,6 +72,5 @@ exe = EXE(
     entitlements_file=None,
     version=None,
     uac_admin=False,
-    # Friendly metadata in Explorer / Task Manager
-    icon=None,
+    icon=str(_icon_ico) if _icon_ico.is_file() else None,
 )

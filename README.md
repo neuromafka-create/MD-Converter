@@ -1,8 +1,16 @@
 # MD-Converter
 
+<p align="center">
+  <img src="assets/logo.png" alt="MD-Converter logo" width="128">
+</p>
+
 Windows GUI-приложение для **пакетной** конвертации документов в чистый **Markdown**, оптимизированный по объёму для базы знаний AI-агента.
 
 **Поддерживаемые форматы:** `.docx` · `.xlsx` · `.pdf`
+
+## Скриншот
+
+![MD-Converter — главное окно](docs/screenshot.png)
 
 ---
 
@@ -154,6 +162,11 @@ MD-Converter/
 ├── main.py                 # Точка входа
 ├── requirements.txt
 ├── build.spec              # PyInstaller
+├── assets/
+│   ├── logo.png            # Логотип / иконка GUI
+│   └── logo.ico            # Иконка EXE и установщика
+├── docs/
+│   └── screenshot.png      # Скриншот для README
 ├── installer/
 │   └── MD-Converter.iss    # Inno Setup: Windows-инсталлятор
 ├── scripts/
