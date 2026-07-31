@@ -59,4 +59,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version=None,
+    uac_admin=False,
+    # Friendly metadata in Explorer / Task Manager
+    icon=None,
 )

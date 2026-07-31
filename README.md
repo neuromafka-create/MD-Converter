@@ -106,14 +106,46 @@ converted_at: "2026-07-31T13:40:36"
 pytest -q
 ```
 
-## Сборка Windows .exe
+## Сборка и инсталлятор (Windows)
+
+### Полная сборка (рекомендуется)
+
+Собирает `MD-Converter.exe` (PyInstaller) и установщик **Setup** (Inno Setup 6):
 
 ```powershell
 pip install -r requirements.txt
-pyinstaller build.spec
+# Нужен Inno Setup 6 (один раз):
+# winget install --id JRSoftware.InnoSetup -e
+
+.\scripts\build_installer.ps1
 ```
 
-Готовый файл: `dist\MD-Converter.exe` (без консольного окна).
+Результаты:
+
+| Файл | Назначение |
+|------|------------|
+| `dist\MD-Converter.exe` | Portable-запуск без установки |
+| `dist\installer\MD-Converter-Setup-1.0.0.exe` | Инсталлятор для пользователей |
+
+Инсталлятор:
+
+- ставит приложение в `%LocalAppData%\Programs\MD-Converter` (без обязательных прав администратора);
+- создаёт ярлыки в меню «Пуск» (и опционально на рабочем столе);
+- добавляет запись в «Установка и удаление программ»;
+- поддерживает русский и английский язык мастера.
+
+### Только EXE
+
+```powershell
+pyinstaller build.spec
+# → dist\MD-Converter.exe
+```
+
+### Только инсталлятор (если EXE уже собран)
+
+```powershell
+.\scripts\build_installer.ps1 -SkipPyInstaller
+```
 
 ## Структура проекта
 
@@ -122,6 +154,10 @@ MD-Converter/
 ├── main.py                 # Точка входа
 ├── requirements.txt
 ├── build.spec              # PyInstaller
+├── installer/
+│   └── MD-Converter.iss    # Inno Setup: Windows-инсталлятор
+├── scripts/
+│   └── build_installer.ps1 # Сборка EXE + Setup
 ├── app/
 │   ├── config.py           # Константы, поддерживаемые расширения
 │   ├── models.py           # ConvertOptions, FileJob, результаты
