@@ -155,7 +155,7 @@ if (-not $SkipInstaller) {
     Write-Host "  $($setup.FullName) ($setupMb MB)"
     Write-Host ""
     Write-Host "Portable folder: dist\MD-Converter.exe + dist\tesseract\ + dist\tessdata\"
-    Write-Host "Distribute the Setup EXE to end users — no winget/Tesseract install needed."
+    Write-Host "Distribute the Setup EXE to end users - no winget/Tesseract install needed."
 } else {
     Write-Host "Skipping installer build"
     Write-Host "Portable OCR needs: dist\MD-Converter.exe + dist\tesseract\ + dist\tessdata\"
