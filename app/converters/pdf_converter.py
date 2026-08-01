@@ -1,4 +1,4 @@
-"""PDF → Markdown structural converter (PyMuPDF)."""
+"""PDF → Markdown structural converter (PyMuPDF + optional Tesseract OCR)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,12 @@ from typing import Any
 
 import fitz  # PyMuPDF
 
+from app.config import OCR_DPI, OCR_MIN_CHARS_PER_PAGE
 from app.converters.base import BaseConverter
 from app.core.optimize import optimize_markdown
 from app.models import ConvertOptions, ConvertResult, FileJob
 from app.utils.markdown import gfm_table, make_frontmatter, normalize_cell_text
+from app.utils.ocr import OcrError, is_ocr_available, ocr_pixmap_to_text, ocr_text_to_markdown
 from app.utils.paths import output_path_for
 
 _BULLET_RE = re.compile(r"^[\u2022\u2023\u25E6\u2043\u2219•●○▪▫►◆■□\-–—]\s+")
@@ -39,6 +41,7 @@ class PdfConverter(BaseConverter):
                 bytes_in=bytes_in,
             )
 
+        ocr_pages = 0
         try:
             if doc.is_encrypted and not doc.authenticate(""):
                 return ConvertResult(
@@ -47,20 +50,31 @@ class PdfConverter(BaseConverter):
                     error="PDF is password-protected",
                     bytes_in=bytes_in,
                 )
-            body = self._document_to_markdown(doc, options)
+            body, ocr_pages = self._document_to_markdown(doc, options)
             page_count = doc.page_count
+        except OcrError as exc:
+            return ConvertResult(
+                source=source,
+                ok=False,
+                error=str(exc),
+                bytes_in=bytes_in,
+            )
         finally:
             doc.close()
 
         title = source.stem
         parts: list[str] = []
         if options.yaml_frontmatter:
+            extra: dict[str, Any] = {"pages": page_count}
+            if ocr_pages > 0:
+                extra["ocr_pages"] = ocr_pages
+                extra["ocr_lang"] = options.ocr_lang
             parts.append(
                 make_frontmatter(
                     title=title,
                     source=source,
                     doc_type="pdf",
-                    extra={"pages": page_count},
+                    extra=extra,
                 )
             )
         parts.append(f"# {title}\n")
@@ -84,20 +98,72 @@ class PdfConverter(BaseConverter):
             bytes_out=bytes_out,
         )
 
-    def _document_to_markdown(self, doc: fitz.Document, options: ConvertOptions) -> str:
+    def _document_to_markdown(
+        self, doc: fitz.Document, options: ConvertOptions
+    ) -> tuple[str, int]:
         page_blocks: list[str] = []
+        ocr_pages = 0
         for page_index in range(doc.page_count):
             page = doc.load_page(page_index)
-            page_md = self._page_to_markdown(page, options)
+            page_md, used_ocr = self._page_to_markdown(page, options)
+            if used_ocr:
+                ocr_pages += 1
             if not page_md.strip():
                 continue
             if doc.page_count > 1:
                 page_blocks.append(f"## Page {page_index + 1}\n\n{page_md.strip()}")
             else:
                 page_blocks.append(page_md.strip())
-        return "\n\n".join(page_blocks).strip() + ("\n" if page_blocks else "")
+        body = "\n\n".join(page_blocks).strip() + ("\n" if page_blocks else "")
+        return body, ocr_pages
 
-    def _page_to_markdown(self, page: fitz.Page, options: ConvertOptions) -> str:
+    def _page_needs_ocr(self, page: fitz.Page, options: ConvertOptions) -> bool:
+        mode = options.ocr_mode
+        if mode == "off":
+            return False
+        if mode == "force":
+            return True
+        # auto: OCR only when the text layer is sparse *and* the page looks like a scan
+        # (has raster images). Short digital pages without images stay on the text layer.
+        raw = (page.get_text("text") or "").strip()
+        significant = re.sub(r"\s+", "", raw)
+        if len(significant) >= OCR_MIN_CHARS_PER_PAGE:
+            return False
+        return self._page_has_images(page)
+
+    @staticmethod
+    def _page_has_images(page: fitz.Page) -> bool:
+        try:
+            if page.get_images(full=True):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            data = page.get_text("dict")
+            return any(block.get("type") == 1 for block in data.get("blocks", []))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _page_via_ocr(self, page: fitz.Page, options: ConvertOptions) -> str:
+        if not is_ocr_available():
+            raise OcrError(
+                "Страница похожа на скан, но Tesseract OCR не найден. "
+                "Установите: winget install --id UB-Mannheim.TesseractOCR -e "
+                "(языки Russian + English), либо отключите OCR в опциях."
+            )
+        # Render at moderate DPI: quality vs speed for batch jobs.
+        matrix = fitz.Matrix(OCR_DPI / 72.0, OCR_DPI / 72.0)
+        pix = page.get_pixmap(matrix=matrix, alpha=False)
+        try:
+            text = ocr_pixmap_to_text(pix, lang=options.ocr_lang)
+        finally:
+            pix = None  # free C resources promptly
+        return ocr_text_to_markdown(text)
+
+    def _page_to_markdown(self, page: fitz.Page, options: ConvertOptions) -> tuple[str, bool]:
+        if self._page_needs_ocr(page, options):
+            return self._page_via_ocr(page, options), True
+
         table_rects: list[fitz.Rect] = []
         table_md_by_y: list[tuple[float, str]] = []
 
@@ -167,7 +233,7 @@ class PdfConverter(BaseConverter):
             out_parts.append(chunk)
             prev_list = is_list
 
-        return "\n".join(out_parts)
+        return "\n".join(out_parts), False
 
     def _estimate_body_size(self, data: dict[str, Any]) -> float:
         sizes: list[float] = []

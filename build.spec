@@ -37,6 +37,7 @@ a = Analysis(
         "fitz",
         "pymupdf",
         "PIL",
+        "pytesseract",
     ],
     hookspath=[],
     hooksconfig={},

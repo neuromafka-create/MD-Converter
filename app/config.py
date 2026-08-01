@@ -15,3 +15,8 @@ MAX_GFM_COLUMNS = 12
 
 # Default output subfolder name when user has not chosen a destination.
 DEFAULT_OUTPUT_DIRNAME = "md_output"
+
+# PDF OCR (Tesseract): pages with fewer extractable chars trigger OCR in auto mode.
+OCR_MIN_CHARS_PER_PAGE = 40
+OCR_DPI = 200
+OCR_DEFAULT_LANG = "rus+eng"

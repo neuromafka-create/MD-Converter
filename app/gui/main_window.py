@@ -107,6 +107,7 @@ class MainWindow:
         self.var_skip_empty = ctk.BooleanVar(value=True)
         self.var_per_sheet = ctk.BooleanVar(value=False)
         self.var_overwrite = ctk.BooleanVar(value=True)
+        self.var_ocr = ctk.BooleanVar(value=True)
         self.var_image = ctk.StringVar(value="placeholder")
 
         for text, var in [
@@ -116,11 +117,12 @@ class MainWindow:
             ("Excel: пропускать пустые строки", self.var_skip_empty),
             ("Excel: отдельный .md на каждый лист", self.var_per_sheet),
             ("Перезаписывать существующие .md", self.var_overwrite),
+            ("OCR для PDF-сканов (Tesseract)", self.var_ocr),
         ]:
             ctk.CTkCheckBox(opt_frame, text=text, variable=var).pack(anchor="w", padx=14, pady=3)
 
         img_row = ctk.CTkFrame(opt_frame, fg_color="transparent")
-        img_row.pack(anchor="w", padx=14, pady=(8, 12), fill="x")
+        img_row.pack(anchor="w", padx=14, pady=(8, 4), fill="x")
         ctk.CTkLabel(img_row, text="Картинки (DOCX/PDF):").pack(side="left")
         ctk.CTkRadioButton(
             img_row, text="плейсхолдер", variable=self.var_image, value="placeholder"
@@ -128,6 +130,15 @@ class MainWindow:
         ctk.CTkRadioButton(
             img_row, text="пропускать", variable=self.var_image, value="skip"
         ).pack(side="left")
+
+        ctk.CTkLabel(
+            opt_frame,
+            text="OCR: только страницы без текста. Нужен Tesseract (rus+eng).",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray65"),
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", padx=14, pady=(0, 12))
 
         out_frame = ctk.CTkFrame(mid)
         out_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
@@ -255,6 +266,7 @@ class MainWindow:
             excel_one_file_per_sheet=bool(self.var_per_sheet.get()),
             image_mode=image_mode,  # type: ignore[arg-type]
             overwrite=bool(self.var_overwrite.get()),
+            ocr_mode="auto" if bool(self.var_ocr.get()) else "off",
         )
 
     def _resolve_output_dir(self, jobs: list[FileJob]) -> Path | None:

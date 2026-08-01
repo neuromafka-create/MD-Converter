@@ -8,6 +8,8 @@ from typing import Literal
 
 
 ImageMode = Literal["skip", "placeholder"]
+# off — never OCR; auto — only pages with almost no text layer; force — every page
+OcrMode = Literal["off", "auto", "force"]
 
 
 @dataclass
@@ -21,6 +23,9 @@ class ConvertOptions:
     excel_one_file_per_sheet: bool = False
     image_mode: ImageMode = "placeholder"
     overwrite: bool = True
+    # PDF scans: OCR via system Tesseract (pytesseract).
+    ocr_mode: OcrMode = "auto"
+    ocr_lang: str = "rus+eng"
 
 
 @dataclass

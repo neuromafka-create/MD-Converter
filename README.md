@@ -32,6 +32,7 @@ MD-Converter делает пакетную структурную конверт
 | **DOCX** | Заголовки, bold/italic, списки, таблицы GFM, гиперссылки |
 | **XLSX** | Все листы, пропуск пустых строк, один `.md` на книгу или на лист |
 | **PDF** | Текст, эвристика заголовков по размеру шрифта, таблицы (PyMuPDF), секции по страницам |
+| **OCR** | Сканы PDF без текстового слоя — Tesseract (`rus+eng`), режим auto / off / force |
 | **Оптимизация** | Без base64-картинок, схлопывание пустых строк, YAML frontmatter |
 | **Надёжность** | Ошибка в одном файле не останавливает весь пакет |
 | **Сборка** | PyInstaller → `MD-Converter.exe` |
@@ -40,6 +41,7 @@ MD-Converter делает пакетную структурную конверт
 
 - Windows 10/11
 - Python **3.11+** (для запуска из исходников)
+- **Tesseract OCR** (опционально, для сканов PDF) — см. [ниже](#ocr-tesseract)
 
 ## Быстрый старт
 
@@ -70,6 +72,29 @@ python main.py
 | Excel: файл на лист | Отдельный `.md` для каждого листа книги |
 | Перезаписывать `.md` | Иначе добавляется суффикс `_1`, `_2`, … |
 | Картинки (DOCX/PDF) | Плейсхолдер `![image]()` или пропуск (base64 **не** встраивается) |
+| OCR для PDF-сканов | **Авто:** OCR только страниц почти без текста; выкл. — только текстовый слой |
+
+### OCR (Tesseract)
+
+Для PDF **без текстового слоя** (сканы, фото страниц) включите опцию **«OCR для PDF-сканов»** (по умолчанию вкл., режим *auto*).
+
+1. Установите Tesseract (сборка UB Mannheim, с языками **Russian** и **English**):
+
+```powershell
+winget install --id UB-Mannheim.TesseractOCR -e
+```
+
+2. При необходимости укажите путь вручную:
+
+```powershell
+$env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+```
+
+3. В frontmatter у страниц, прошедших OCR, появятся поля `ocr_pages` и `ocr_lang`.
+
+Цифровые PDF с нормальным текстовым слоем OCR **не** запускают (быстро и без зависимости от Tesseract).
+
+Программные режимы (`ConvertOptions.ocr_mode`): `off` | `auto` | `force`.
 
 ## Пример результата
 
@@ -102,7 +127,8 @@ converted_at: "2026-07-31T13:40:36"
 | `python-docx` | Чтение Word |
 | `openpyxl` | Чтение Excel |
 | `pymupdf` | Чтение PDF |
-| `Pillow` | Зависимость CustomTkinter |
+| `Pillow` | Изображения / рендер страниц для OCR |
+| `pytesseract` | Обёртка над системным Tesseract OCR |
 | `pytest` | Тесты |
 | `pyinstaller` | Сборка `.exe` |
 
@@ -192,14 +218,14 @@ MD-Converter/
 ## Ограничения
 
 - Нет legacy `.doc` / `.xls` (только Office Open XML и PDF)
-- PDF **без текстового слоя** (сканы) — текст не извлекается; OCR пока не реализован
+- OCR требует установленный **Tesseract** (не вшит в `.exe`); качество зависит от DPI/скана
 - Сложные нумерации Word и экзотическая вёрстка PDF — best-effort
 - Нет LLM-суммаризации (только структурная конвертация)
 - Зашифрованные PDF без пустого пароля не открываются
 
 ## Roadmap (идеи)
 
-- [ ] OCR для сканов (Tesseract / Windows OCR)
+- [x] OCR для сканов (Tesseract)
 - [ ] CLI-режим для пайплайнов
 - [ ] `.pptx`, legacy Office через LibreOffice
 - [ ] Drag-and-drop в GUI
