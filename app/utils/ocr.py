@@ -163,14 +163,22 @@ def load_image_for_ocr(
     path: Path | str,
     *,
     max_side: int | None = None,
+    min_side: int | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """
-    Load an image file for OCR: EXIF orientation, RGB, optional downscale.
+    Load an image file for OCR: EXIF orientation, RGB, optional up/downscale.
 
     Returns ``(pil_image, meta)`` where meta has width/height (after prep)
     and original dimensions when resized.
     """
     from PIL import Image, ImageOps
+
+    from app.config import OCR_IMAGE_MAX_SIDE, OCR_IMAGE_MIN_SIDE
+
+    if max_side is None:
+        max_side = OCR_IMAGE_MAX_SIDE
+    if min_side is None:
+        min_side = OCR_IMAGE_MIN_SIDE
 
     path = Path(path)
     try:
@@ -199,28 +207,47 @@ def load_image_for_ocr(
         "tessdata": str(bundled_tessdata_dir() or ""),
     }
 
-    if max_side and max(img.size) > max_side:
-        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
-        meta["width"] = img.width
-        meta["height"] = img.height
+    # Upscale small captures (compressed webinar stills, phone screenshots).
+    shortest = min(img.size)
+    if min_side and shortest > 0 and shortest < min_side:
+        scale = min_side / float(shortest)
+        new_size = (max(1, int(img.width * scale)), max(1, int(img.height * scale)))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
         meta["original_width"] = orig_w
         meta["original_height"] = orig_h
+        meta["upscaled"] = True
+
+    if max_side and max(img.size) > max_side:
+        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        meta.setdefault("original_width", orig_w)
+        meta.setdefault("original_height", orig_h)
+
+    meta["width"] = img.width
+    meta["height"] = img.height
 
     return img, meta
 
 
 def prepare_image_for_ocr(image: Any) -> Any:
     """
-    Light preprocessing for UI screenshots / slides (helps Cyrillic on dark UIs).
+    Preprocess screenshots/slides for Cyrillic OCR.
 
-    Converts to grayscale and auto-contrasts; keeps color path if already L.
+    Grayscale, invert dark slides (light text on dark UI), autocontrast,
+    light sharpen — typical webinar / landing-page capture profile.
     """
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageFilter, ImageOps, ImageStat
 
     if image.mode != "L":
         image = ImageOps.grayscale(image)
-    # Autocontrast improves dark-on-dark and light-on-dark slides.
-    image = ImageOps.autocontrast(image, cutoff=1)
+
+    # Dark UI (ChatGPT, Claude, code themes): invert so text is dark-on-light.
+    mean = float(ImageStat.Stat(image).mean[0])
+    if mean < 110:
+        image = ImageOps.invert(image)
+
+    image = ImageOps.autocontrast(image, cutoff=0.5)
+    # Mild sharpen helps bold headline fonts without amplifying noise too much.
+    image = image.filter(ImageFilter.UnsharpMask(radius=1.2, percent=140, threshold=2))
     return image
 
 
@@ -230,22 +257,26 @@ def ocr_image_to_text(
     lang: str = DEFAULT_OCR_LANG,
     psm: int = 3,
     preprocess: bool = True,
+    fix_homoglyphs: bool = True,
 ) -> str:
     """
     Run Tesseract on a PIL Image (or compatible object).
 
-    Uses **bundled** ``tessdata/`` (rus+eng) so system installs without Russian
-    still work. ``psm=3`` — automatic page segmentation.
+    Uses **bundled** ``tessdata/`` (rus+eng). Applies homoglyph repair so
+    ``UEPES`` → ``ЧЕРЕЗ`` while keeping real English (``CLAUDE``).
     """
     configure_pytesseract()
     import pytesseract
+
+    from app.utils.ocr_postprocess import fix_cyrillic_latin_mixups
 
     tessdata_dir = resolve_tessdata_dir()
     ensure_langs_available(lang, tessdata_dir)
 
     work = prepare_image_for_ocr(image) if preprocess else image
     # TESSDATA_PREFIX already set in configure_pytesseract() to tessdata_dir.
-    config = f"--psm {psm}"
+    # preserve_interword_spaces helps multi-word Russian headlines.
+    config = f"--psm {psm} -c preserve_interword_spaces=1"
 
     try:
         text = pytesseract.image_to_string(work, lang=lang, config=config)
@@ -260,7 +291,10 @@ def ocr_image_to_text(
             ) from exc
         raise OcrError(f"Tesseract error: {msg}") from exc
 
-    return _normalize_ocr_text(text)
+    text = _normalize_ocr_text(text)
+    if fix_homoglyphs:
+        text = fix_cyrillic_latin_mixups(text)
+    return text
 
 
 def ocr_image_file(
@@ -268,18 +302,23 @@ def ocr_image_file(
     *,
     lang: str = DEFAULT_OCR_LANG,
     max_side: int | None = None,
-    psm: int = 3,
+    psm: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """OCR a file on disk. Returns ``(plain_text, image_meta)``."""
+    from app.config import OCR_IMAGE_PSM
+
     if not is_ocr_available():
         raise OcrError(
             "Tesseract OCR не найден. Установите движок:\n"
             "  winget install --id UB-Mannheim.TesseractOCR -e\n"
             "Языковые модели rus+eng поставляются с MD-Converter (папка tessdata/)."
         )
+    if psm is None:
+        psm = OCR_IMAGE_PSM
     img, meta = load_image_for_ocr(path, max_side=max_side)
     text = ocr_image_to_text(img, lang=lang, psm=psm)
     meta["ocr_lang"] = lang
+    meta["ocr_psm"] = psm
     meta["tessdata_dir"] = str(resolve_tessdata_dir())
     return text, meta
 
@@ -290,11 +329,13 @@ def ocr_pixmap_to_text(pix, *, lang: str = DEFAULT_OCR_LANG) -> str:
 
     from PIL import Image
 
+    from app.config import OCR_PDF_PSM
+
     # PNG round-trip is reliable across colorspaces (RGB/Gray/CMYK/alpha).
     img = Image.open(BytesIO(pix.tobytes("png")))
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-    return ocr_image_to_text(img, lang=lang)
+    return ocr_image_to_text(img, lang=lang, psm=OCR_PDF_PSM)
 
 
 def _normalize_ocr_text(text: str) -> str:

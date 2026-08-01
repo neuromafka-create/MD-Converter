@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 APP_NAME = "MD-Converter"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 WINDOW_TITLE = f"{APP_NAME} — DOCX/XLSX/PDF/PNG/JPG → Markdown"
 WINDOW_MIN_WIDTH = 920
 WINDOW_MIN_HEIGHT = 680
@@ -23,4 +23,9 @@ OCR_MIN_CHARS_PER_PAGE = 40
 OCR_DPI = 200
 OCR_DEFAULT_LANG = "rus+eng"  # models live in project tessdata/ (not system-only eng)
 # Longest side of screenshots/scans before OCR (speed vs quality for 4K captures).
-OCR_IMAGE_MAX_SIDE = 3000
+OCR_IMAGE_MAX_SIDE = 3600
+# Upscale small screenshots so thin UI fonts OCR more reliably.
+OCR_IMAGE_MIN_SIDE = 1600
+# Images/slides: single uniform block works better than sparse auto page layout.
+OCR_IMAGE_PSM = 6
+OCR_PDF_PSM = 3
