@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.resources import resource_path
+from app.resources import project_root, resource_path
 
 # Common Windows install locations (UB Mannheim builds, winget, chocolatey).
 _WINDOWS_TESSERACT_CANDIDATES = (
@@ -27,12 +27,44 @@ class OcrError(RuntimeError):
     """Raised when OCR cannot run (missing engine, bad language, etc.)."""
 
 
+def _bundled_tesseract_candidates() -> list[Path]:
+    """
+    Paths shipped with the app / installer.
+
+    Install layout:  ``{app}/tesseract/tesseract.exe``
+    Portable layout: ``dist/tesseract/tesseract.exe`` next to the EXE.
+    """
+    roots: list[Path] = [project_root()]
+    # Dev: also check dist/ after a local build.
+    try:
+        roots.append(Path(__file__).resolve().parent.parent.parent / "dist")
+    except Exception:  # noqa: BLE001
+        pass
+    out: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        for rel in (
+            ("tesseract", "tesseract.exe"),
+            ("tesseract.exe",),
+        ):
+            p = root.joinpath(*rel)
+            key = str(p).lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
+    return out
+
+
 @lru_cache(maxsize=1)
 def find_tesseract() -> str | None:
     """
     Locate the Tesseract executable.
 
-    Order: TESSERACT_CMD / TESSERACT_PATH env, PATH, common Windows paths.
+    Order:
+    1. TESSERACT_CMD / TESSERACT_PATH env
+    2. Bundled next to the app (installer / portable package)
+    3. PATH
+    4. Common Windows install paths
     """
     for env_key in ("TESSERACT_CMD", "TESSERACT_PATH"):
         raw = os.environ.get(env_key, "").strip().strip('"')
@@ -40,6 +72,10 @@ def find_tesseract() -> str | None:
             path = Path(raw)
             if path.is_file():
                 return str(path)
+
+    for candidate in _bundled_tesseract_candidates():
+        if candidate.is_file():
+            return str(candidate.resolve())
 
     which = shutil.which("tesseract")
     if which:
@@ -65,7 +101,8 @@ def bundled_tessdata_dir() -> Path | None:
     still recognize Cyrillic correctly.
     """
     candidates = [
-        resource_path("tessdata"),
+        resource_path("tessdata"),  # PyInstaller _MEIPASS or project root
+        project_root() / "tessdata",  # installer layout: {app}/tessdata
         # Dev fallback if resource_path layout differs
         Path(__file__).resolve().parent.parent.parent / "tessdata",
     ]
@@ -140,9 +177,8 @@ def configure_pytesseract() -> str:
     path = find_tesseract()
     if not path:
         raise OcrError(
-            "Tesseract OCR не найден. Установите движок (языки не обязательны — "
-            "они вшиты в проект):\n"
-            "  winget install --id UB-Mannheim.TesseractOCR -e\n"
+            "Tesseract OCR не найден.\n"
+            "Переустановите MD-Converter из полного Setup (движок OCR входит в пакет),\n"
             "или задайте путь: set TESSERACT_CMD=C:\\…\\tesseract.exe"
         )
     import pytesseract
@@ -309,9 +345,8 @@ def ocr_image_file(
 
     if not is_ocr_available():
         raise OcrError(
-            "Tesseract OCR не найден. Установите движок:\n"
-            "  winget install --id UB-Mannheim.TesseractOCR -e\n"
-            "Языковые модели rus+eng поставляются с MD-Converter (папка tessdata/)."
+            "Tesseract OCR не найден. Используйте полный установщик MD-Converter "
+            "(Setup), в который уже входит движок OCR и языки rus+eng."
         )
     if psm is None:
         psm = OCR_IMAGE_PSM

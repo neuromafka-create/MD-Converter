@@ -1,22 +1,26 @@
 <#
 .SYNOPSIS
-  Build MD-Converter.exe (PyInstaller) and Windows installer (Inno Setup).
+  Build MD-Converter.exe (PyInstaller), stage Tesseract runtime, and Windows installer.
 
 .DESCRIPTION
   1. Installs runtime deps if needed
-  2. Builds onefile EXE via build.spec
-  3. Compiles installer\MD-Converter.iss with ISCC
-  4. Prints path to Setup EXE
+  2. Builds onefile EXE via build.spec (embeds tessdata rus+eng)
+  3. Stages portable Tesseract engine into dist\tesseract\
+  4. Compiles installer\MD-Converter.iss with ISCC (all-in-one Setup)
+  5. Prints paths to portable folder and Setup EXE
 
 .EXAMPLE
   .\scripts\build_installer.ps1
-  .\scripts\build_installer.ps1 -SkipPyInstaller   # only recompile installer
+  .\scripts\build_installer.ps1 -SkipPyInstaller
+  .\scripts\build_installer.ps1 -SkipInstaller
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipPyInstaller,
     [switch]$SkipInstaller,
-    [string]$Python = ""
+    [switch]$SkipTesseractStage,
+    [string]$Python = "",
+    [string]$TesseractSource = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,6 +59,14 @@ $py = Find-Python
 Write-Host "Python: $py"
 Write-Host "Root:   $Root"
 
+# --- Tessdata present ---
+$tessdataRus = Join-Path $Root "tessdata\rus.traineddata"
+$tessdataEng = Join-Path $Root "tessdata\eng.traineddata"
+if (-not ((Test-Path $tessdataRus) -and (Test-Path $tessdataEng))) {
+    Write-Step "Downloading bundled tessdata (rus+eng)"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\download_tessdata.ps1")
+}
+
 # --- Dependencies ---
 Write-Step "Checking dependencies"
 & $py -m pip install -q -r (Join-Path $Root "requirements.txt")
@@ -67,7 +79,7 @@ if (-not $SkipPyInstaller) {
     $dist = Join-Path $Root "dist"
     $build = Join-Path $Root "build"
     if (Test-Path $dist) {
-        # Keep installer folder if present
+        # Keep installer folder if present; wipe other dist content for clean stage
         Get-ChildItem $dist -File | Remove-Item -Force -ErrorAction SilentlyContinue
         Get-ChildItem $dist -Directory | Where-Object { $_.Name -ne "installer" } |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -86,6 +98,31 @@ if (-not $SkipPyInstaller) {
     }
     Write-Host "Skipping PyInstaller (using existing EXE)"
 }
+
+# --- Stage Tesseract runtime (all-in-one, no winget for end users) ---
+$tessRuntime = Join-Path $Root "dist\tesseract"
+if (-not $SkipTesseractStage) {
+    Write-Step "Staging portable Tesseract runtime"
+    $stageScript = Join-Path $Root "scripts\stage_tesseract_runtime.ps1"
+    if ($TesseractSource) {
+        & $stageScript -Dest $tessRuntime -Source $TesseractSource
+    } else {
+        & $stageScript -Dest $tessRuntime
+    }
+    if (-not (Test-Path (Join-Path $tessRuntime "tesseract.exe"))) {
+        throw "Expected staged engine missing: $tessRuntime\tesseract.exe"
+    }
+} else {
+    if (-not (Test-Path (Join-Path $tessRuntime "tesseract.exe"))) {
+        throw "SkipTesseractStage set but $tessRuntime\tesseract.exe missing"
+    }
+    Write-Host "Skipping Tesseract stage (using existing dist\tesseract)"
+}
+
+# Also place tessdata next to portable EXE for non-installer use
+$portableTessdata = Join-Path $Root "dist\tessdata"
+New-Item -ItemType Directory -Force -Path $portableTessdata | Out-Null
+Copy-Item (Join-Path $Root "tessdata\*.traineddata") -Destination $portableTessdata -Force
 
 # --- Inno Setup ---
 if (-not $SkipInstaller) {
@@ -114,12 +151,14 @@ if (-not $SkipInstaller) {
 
     $setupMb = [math]::Round($setup.Length / 1MB, 2)
     Write-Host ""
-    Write-Host "Installer ready:" -ForegroundColor Green
+    Write-Host "Installer ready (all-in-one, OCR included):" -ForegroundColor Green
     Write-Host "  $($setup.FullName) ($setupMb MB)"
     Write-Host ""
-    Write-Host "Distribute this file to end users."
+    Write-Host "Portable folder: dist\MD-Converter.exe + dist\tesseract\ + dist\tessdata\"
+    Write-Host "Distribute the Setup EXE to end users — no winget/Tesseract install needed."
 } else {
     Write-Host "Skipping installer build"
+    Write-Host "Portable OCR needs: dist\MD-Converter.exe + dist\tesseract\ + dist\tessdata\"
 }
 
 Write-Step "Done"

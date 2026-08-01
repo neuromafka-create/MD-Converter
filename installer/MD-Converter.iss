@@ -1,9 +1,12 @@
 ; MD-Converter — Inno Setup 6 installer script
 ; Compile with: ISCC.exe installer\MD-Converter.iss
 ; Or run:      scripts\build_installer.ps1
+;
+; All-in-one package: GUI app + portable Tesseract runtime + rus/eng tessdata
+; (tessdata is embedded in the PyInstaller EXE; engine lives in {app}\tesseract\).
 
 #define MyAppName "MD-Converter"
-#define MyAppVersion "1.1.2"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "MD-Converter"
 #define MyAppURL "https://github.com/neuromafka-create/MD-Converter"
 #define MyAppExeName "MD-Converter.exe"
@@ -18,7 +21,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
@@ -40,12 +43,14 @@ DisableReadyPage=no
 ShowLanguageDialog=auto
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription={#MyAppName} Setup
+VersionInfoDescription={#MyAppName} Setup (with OCR)
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
 MinVersion=10.0
 CloseApplications=yes
 RestartApplications=no
+; Extra disk for bundled Tesseract runtime
+DiskSpanning=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -55,8 +60,12 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Built by PyInstaller (onefile)
+; Built by PyInstaller (onefile) — includes tessdata rus+eng
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Portable Tesseract engine (staged by scripts\stage_tesseract_runtime.ps1)
+Source: "..\dist\tesseract\*"; DestDir: "{app}\tesseract"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Loose tessdata next to app as fallback (also inside EXE)
+Source: "..\tessdata\*.traineddata"; DestDir: "{app}\tessdata"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
