@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.config import IMAGE_EXTENSIONS
 from app.converters.base import BaseConverter
 from app.converters.docx_converter import DocxConverter
+from app.converters.image_converter import ImageConverter
 from app.converters.pdf_converter import PdfConverter
 from app.converters.xlsx_converter import XlsxConverter
 from app.models import ConvertOptions, ConvertResult, FileJob
@@ -17,6 +19,8 @@ def get_converter(path: Path) -> BaseConverter:
         return XlsxConverter()
     if ext == ".pdf":
         return PdfConverter()
+    if ext in IMAGE_EXTENSIONS:
+        return ImageConverter()
     raise ValueError(f"Unsupported file type: {ext}")
 
 
@@ -50,6 +54,7 @@ __all__ = [
     "DocxConverter",
     "XlsxConverter",
     "PdfConverter",
+    "ImageConverter",
     "get_converter",
     "convert_job",
 ]

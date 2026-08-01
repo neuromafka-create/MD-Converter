@@ -10,7 +10,7 @@ from app.models import FileJob
 
 def scan_paths(paths: list[Path], *, recursive: bool = True) -> list[FileJob]:
     """
-    Collect .docx / .xlsx / .pdf files from a mix of files and directories.
+    Collect convertible files (.docx / .xlsx / .pdf / images) from files and folders.
 
     Relative path is computed against the nearest selected root:
     - for a file selection: relative name only

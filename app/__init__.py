@@ -1,3 +1,3 @@
-"""MD-Converter: batch DOCX/XLSX/PDF → Markdown for AI knowledge bases."""
+"""MD-Converter: batch DOCX/XLSX/PDF/images → Markdown for AI knowledge bases."""
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"

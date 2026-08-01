@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 APP_NAME = "MD-Converter"
-APP_VERSION = "1.0.1"
-WINDOW_TITLE = f"{APP_NAME} — DOCX/XLSX/PDF → Markdown"
+APP_VERSION = "1.1.0"
+WINDOW_TITLE = f"{APP_NAME} — DOCX/XLSX/PDF/PNG/JPG → Markdown"
 WINDOW_MIN_WIDTH = 920
 WINDOW_MIN_HEIGHT = 680
 
-SUPPORTED_EXTENSIONS = {".docx", ".xlsx", ".pdf"}
+DOCUMENT_EXTENSIONS = {".docx", ".xlsx", ".pdf"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+SUPPORTED_EXTENSIONS = DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
 
 # Excel tables wider than this use row-block format instead of GFM pipes.
 MAX_GFM_COLUMNS = 12
@@ -20,3 +22,5 @@ DEFAULT_OUTPUT_DIRNAME = "md_output"
 OCR_MIN_CHARS_PER_PAGE = 40
 OCR_DPI = 200
 OCR_DEFAULT_LANG = "rus+eng"
+# Longest side of screenshots/scans before OCR (speed vs quality for 4K captures).
+OCR_IMAGE_MAX_SIDE = 3000

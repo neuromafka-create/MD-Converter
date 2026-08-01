@@ -1,4 +1,4 @@
-"""OCR helpers for scanned PDFs (Tesseract via pytesseract)."""
+"""OCR helpers for scanned PDFs and images (Tesseract via pytesseract)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 # Common Windows install locations (UB Mannheim builds, winget, chocolatey).
 _WINDOWS_TESSERACT_CANDIDATES = (
@@ -63,6 +64,55 @@ def configure_pytesseract() -> str:
     return path
 
 
+def load_image_for_ocr(
+    path: Path | str,
+    *,
+    max_side: int | None = None,
+) -> tuple[Any, dict[str, Any]]:
+    """
+    Load an image file for OCR: EXIF orientation, RGB, optional downscale.
+
+    Returns ``(pil_image, meta)`` where meta has width/height (after prep)
+    and original dimensions when resized.
+    """
+    from PIL import Image, ImageOps
+
+    path = Path(path)
+    try:
+        img = Image.open(path)
+        img.load()
+    except Exception as exc:  # noqa: BLE001
+        raise OcrError(f"Не удалось открыть изображение: {exc}") from exc
+
+    img = ImageOps.exif_transpose(img)
+    orig_w, orig_h = img.size
+
+    if img.mode not in ("RGB", "L"):
+        # Screenshots/webinar grabs often come as RGBA or P.
+        if img.mode in ("RGBA", "LA", "P"):
+            background = Image.new("RGB", img.size, (255, 255, 255))
+            rgba = img.convert("RGBA")
+            background.paste(rgba, mask=rgba.split()[-1])
+            img = background
+        else:
+            img = img.convert("RGB")
+
+    meta: dict[str, Any] = {
+        "width": img.width,
+        "height": img.height,
+        "format": (img.format or path.suffix.lstrip(".")).lower(),
+    }
+
+    if max_side and max(img.size) > max_side:
+        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        meta["width"] = img.width
+        meta["height"] = img.height
+        meta["original_width"] = orig_w
+        meta["original_height"] = orig_h
+
+    return img, meta
+
+
 def ocr_image_to_text(
     image,
     *,
@@ -72,7 +122,7 @@ def ocr_image_to_text(
     """
     Run Tesseract on a PIL Image (or compatible object).
 
-    ``psm=3`` — fully automatic page segmentation (good default for scans).
+    ``psm=3`` — fully automatic page segmentation (good default for scans/slides).
     """
     configure_pytesseract()
     import pytesseract
@@ -94,6 +144,25 @@ def ocr_image_to_text(
         raise OcrError(f"Tesseract error: {msg}") from exc
 
     return _normalize_ocr_text(text)
+
+
+def ocr_image_file(
+    path: Path | str,
+    *,
+    lang: str = "rus+eng",
+    max_side: int | None = None,
+    psm: int = 3,
+) -> tuple[str, dict[str, Any]]:
+    """OCR a file on disk. Returns ``(plain_text, image_meta)``."""
+    if not is_ocr_available():
+        raise OcrError(
+            "Tesseract OCR не найден. Установите: "
+            "winget install --id UB-Mannheim.TesseractOCR -e "
+            "(языки Russian + English), либо задайте TESSERACT_CMD."
+        )
+    img, meta = load_image_for_ocr(path, max_side=max_side)
+    text = ocr_image_to_text(img, lang=lang, psm=psm)
+    return text, meta
 
 
 def ocr_pixmap_to_text(pix, *, lang: str = "rus+eng") -> str:

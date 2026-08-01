@@ -50,7 +50,7 @@ class MainWindow:
         ).grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
             header,
-            text=f"Пакетная конвертация DOCX/XLSX/PDF → Markdown для базы знаний агента  ·  v{APP_VERSION}",
+            text=f"Пакетная конвертация DOCX/XLSX/PDF/PNG/JPG → Markdown  ·  v{APP_VERSION}",
             font=ctk.CTkFont(size=13),
             text_color=("gray40", "gray65"),
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
@@ -117,13 +117,13 @@ class MainWindow:
             ("Excel: пропускать пустые строки", self.var_skip_empty),
             ("Excel: отдельный .md на каждый лист", self.var_per_sheet),
             ("Перезаписывать существующие .md", self.var_overwrite),
-            ("OCR для PDF-сканов (Tesseract)", self.var_ocr),
+            ("OCR (PDF-сканы и изображения, Tesseract)", self.var_ocr),
         ]:
             ctk.CTkCheckBox(opt_frame, text=text, variable=var).pack(anchor="w", padx=14, pady=3)
 
         img_row = ctk.CTkFrame(opt_frame, fg_color="transparent")
         img_row.pack(anchor="w", padx=14, pady=(8, 4), fill="x")
-        ctk.CTkLabel(img_row, text="Картинки (DOCX/PDF):").pack(side="left")
+        ctk.CTkLabel(img_row, text="Картинки в DOCX/PDF:").pack(side="left")
         ctk.CTkRadioButton(
             img_row, text="плейсхолдер", variable=self.var_image, value="placeholder"
         ).pack(side="left", padx=(10, 6))
@@ -133,7 +133,7 @@ class MainWindow:
 
         ctk.CTkLabel(
             opt_frame,
-            text="OCR: только страницы без текста. Нужен Tesseract (rus+eng).",
+            text="OCR: PNG/JPG всегда; PDF — страницы без текста. Нужен Tesseract (rus+eng).",
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray65"),
             wraplength=360,
@@ -214,9 +214,11 @@ class MainWindow:
 
     def _add_files(self) -> None:
         paths = filedialog.askopenfilenames(
-            title="Выберите DOCX / XLSX",
+            title="Выберите документы и изображения",
             filetypes=[
+                ("Поддерживаемые", "*.docx;*.xlsx;*.pdf;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.tif;*.tiff"),
                 ("Документы", "*.docx;*.xlsx;*.pdf"),
+                ("Изображения", "*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.tif;*.tiff"),
                 ("Word", "*.docx"),
                 ("Excel", "*.xlsx"),
                 ("PDF", "*.pdf"),
@@ -285,7 +287,10 @@ class MainWindow:
 
         jobs = getattr(self, "_jobs_cache", None) or scan_paths(self._paths, recursive=True)
         if not jobs:
-            messagebox.showinfo("Нет файлов", "Добавьте .docx, .xlsx или .pdf файлы / папку.")
+            messagebox.showinfo(
+                "Нет файлов",
+                "Добавьте .docx, .xlsx, .pdf, .png, .jpg (или папку) для конвертации.",
+            )
             return
 
         output_dir = self._resolve_output_dir(jobs)
