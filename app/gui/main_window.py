@@ -133,7 +133,7 @@ class MainWindow:
 
         ctk.CTkLabel(
             opt_frame,
-            text="OCR: PNG/JPG всегда; PDF — страницы без текста. Нужен Tesseract (rus+eng).",
+            text="OCR: PNG/JPG всегда; PDF — без текста. Tesseract + языки rus/eng из tessdata/.",
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray65"),
             wraplength=360,

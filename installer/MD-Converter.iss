@@ -3,7 +3,7 @@
 ; Or run:      scripts\build_installer.ps1
 
 #define MyAppName "MD-Converter"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "MD-Converter"
 #define MyAppURL "https://github.com/neuromafka-create/MD-Converter"
 #define MyAppExeName "MD-Converter.exe"

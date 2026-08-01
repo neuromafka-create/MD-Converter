@@ -23,9 +23,9 @@ class ConvertOptions:
     excel_one_file_per_sheet: bool = False
     image_mode: ImageMode = "placeholder"
     overwrite: bool = True
-    # PDF scans: OCR via system Tesseract (pytesseract).
+    # PDF scans + images: OCR via Tesseract; language packs shipped in tessdata/.
     ocr_mode: OcrMode = "auto"
-    ocr_lang: str = "rus+eng"
+    ocr_lang: str = "rus+eng"  # requires bundled rus.traineddata + eng.traineddata
 
 
 @dataclass

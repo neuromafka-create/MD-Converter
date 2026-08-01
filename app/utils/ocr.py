@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from app.resources import resource_path
 
 # Common Windows install locations (UB Mannheim builds, winget, chocolatey).
 _WINDOWS_TESSERACT_CANDIDATES = (
@@ -14,6 +17,10 @@ _WINDOWS_TESSERACT_CANDIDATES = (
     r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
     r"C:\Program Files\Tesseract-OCR\tesseract",
 )
+
+# Languages we ship under tessdata/ (see scripts/download_tessdata.ps1).
+BUNDLED_OCR_LANGS = ("rus", "eng")
+DEFAULT_OCR_LANG = "rus+eng"
 
 
 class OcrError(RuntimeError):
@@ -25,7 +32,7 @@ def find_tesseract() -> str | None:
     """
     Locate the Tesseract executable.
 
-    Order: TESSDATA / TESSERACT_CMD env, PATH, common Windows paths.
+    Order: TESSERACT_CMD / TESSERACT_PATH env, PATH, common Windows paths.
     """
     for env_key in ("TESSERACT_CMD", "TESSERACT_PATH"):
         raw = os.environ.get(env_key, "").strip().strip('"')
@@ -49,18 +56,106 @@ def is_ocr_available() -> bool:
     return find_tesseract() is not None
 
 
+@lru_cache(maxsize=1)
+def bundled_tessdata_dir() -> Path | None:
+    """
+    Directory with project-shipped ``*.traineddata`` (rus + eng).
+
+    Prefer this over the system tessdata so winget installs without Russian
+    still recognize Cyrillic correctly.
+    """
+    candidates = [
+        resource_path("tessdata"),
+        # Dev fallback if resource_path layout differs
+        Path(__file__).resolve().parent.parent.parent / "tessdata",
+    ]
+    for directory in candidates:
+        if not directory.is_dir():
+            continue
+        if all((directory / f"{lang}.traineddata").is_file() for lang in BUNDLED_OCR_LANGS):
+            return directory.resolve()
+    return None
+
+
+def resolve_tessdata_dir() -> Path:
+    """
+    Tessdata directory for OCR.
+
+    1. Env ``TESSDATA_DIR`` (folder that contains *.traineddata)
+    2. Bundled project tessdata (rus+eng)
+    3. System tessdata next to tesseract.exe (often eng-only — last resort)
+    """
+    env_dir = os.environ.get("TESSDATA_DIR", "").strip().strip('"')
+    if env_dir:
+        p = Path(env_dir)
+        if p.is_dir():
+            return p.resolve()
+
+    bundled = bundled_tessdata_dir()
+    if bundled is not None:
+        return bundled
+
+    tess = find_tesseract()
+    if tess:
+        system = Path(tess).resolve().parent / "tessdata"
+        if system.is_dir():
+            return system
+
+    raise OcrError(
+        "Не найдены языковые модели OCR (tessdata).\n"
+        "Выполните: .\\scripts\\download_tessdata.ps1\n"
+        "или положите rus.traineddata и eng.traineddata в папку tessdata/."
+    )
+
+
+def list_trained_langs(tessdata_dir: Path | None = None) -> list[str]:
+    """Language codes present as ``*.traineddata`` (excluding osd)."""
+    directory = tessdata_dir or resolve_tessdata_dir()
+    langs: list[str] = []
+    for path in sorted(directory.glob("*.traineddata")):
+        code = path.stem
+        if code.lower() == "osd":
+            continue
+        langs.append(code)
+    return langs
+
+
+def ensure_langs_available(lang: str, tessdata_dir: Path | None = None) -> None:
+    """Raise OcrError if any language in a ``+``-joined string is missing."""
+    directory = tessdata_dir or resolve_tessdata_dir()
+    available = {x.lower() for x in list_trained_langs(directory)}
+    missing = [part for part in lang.split("+") if part.strip() and part.strip().lower() not in available]
+    if missing:
+        have = ", ".join(sorted(available)) or "(пусто)"
+        raise OcrError(
+            f"В tessdata нет языков: {', '.join(missing)}.\n"
+            f"Папка: {directory}\n"
+            f"Доступно: {have}\n"
+            "Запустите .\\scripts\\download_tessdata.ps1 (скачает rus+eng в проект)."
+        )
+
+
 def configure_pytesseract() -> str:
     """Point pytesseract at a discovered binary. Returns the path used."""
     path = find_tesseract()
     if not path:
         raise OcrError(
-            "Tesseract OCR не найден. Установите его, например:\n"
+            "Tesseract OCR не найден. Установите движок (языки не обязательны — "
+            "они вшиты в проект):\n"
             "  winget install --id UB-Mannheim.TesseractOCR -e\n"
             "или задайте путь: set TESSERACT_CMD=C:\\…\\tesseract.exe"
         )
     import pytesseract
 
     pytesseract.pytesseract.tesseract_cmd = path
+
+    # Prefer bundled models over system tessdata (often eng-only after winget).
+    # Tesseract 5: TESSDATA_PREFIX = directory that contains *.traineddata.
+    # We rely on the env var (not --tessdata-dir in config) so paths with
+    # spaces work; pytesseract splits config with shlex and breaks quoted paths.
+    tessdata = resolve_tessdata_dir()
+    os.environ["TESSDATA_PREFIX"] = str(tessdata.resolve())
+
     return path
 
 
@@ -101,6 +196,7 @@ def load_image_for_ocr(
         "width": img.width,
         "height": img.height,
         "format": (img.format or path.suffix.lstrip(".")).lower(),
+        "tessdata": str(bundled_tessdata_dir() or ""),
     }
 
     if max_side and max(img.size) > max_side:
@@ -113,33 +209,54 @@ def load_image_for_ocr(
     return img, meta
 
 
+def prepare_image_for_ocr(image: Any) -> Any:
+    """
+    Light preprocessing for UI screenshots / slides (helps Cyrillic on dark UIs).
+
+    Converts to grayscale and auto-contrasts; keeps color path if already L.
+    """
+    from PIL import Image, ImageOps
+
+    if image.mode != "L":
+        image = ImageOps.grayscale(image)
+    # Autocontrast improves dark-on-dark and light-on-dark slides.
+    image = ImageOps.autocontrast(image, cutoff=1)
+    return image
+
+
 def ocr_image_to_text(
     image,
     *,
-    lang: str = "rus+eng",
+    lang: str = DEFAULT_OCR_LANG,
     psm: int = 3,
+    preprocess: bool = True,
 ) -> str:
     """
     Run Tesseract on a PIL Image (or compatible object).
 
-    ``psm=3`` — fully automatic page segmentation (good default for scans/slides).
+    Uses **bundled** ``tessdata/`` (rus+eng) so system installs without Russian
+    still work. ``psm=3`` — automatic page segmentation.
     """
     configure_pytesseract()
     import pytesseract
 
+    tessdata_dir = resolve_tessdata_dir()
+    ensure_langs_available(lang, tessdata_dir)
+
+    work = prepare_image_for_ocr(image) if preprocess else image
+    # TESSDATA_PREFIX already set in configure_pytesseract() to tessdata_dir.
     config = f"--psm {psm}"
+
     try:
-        text = pytesseract.image_to_string(image, lang=lang, config=config)
+        text = pytesseract.image_to_string(work, lang=lang, config=config)
     except pytesseract.TesseractNotFoundError as exc:
         raise OcrError(str(exc)) from exc
     except pytesseract.TesseractError as exc:
-        # Missing language packs often surface here.
         msg = str(exc)
         if "Failed loading language" in msg or "Error opening data file" in msg:
             raise OcrError(
-                f"Не удалось загрузить языки OCR «{lang}». "
-                "При установке Tesseract отметьте Russian + English, "
-                "или укажите ocr_lang (например eng)."
+                f"Не удалось загрузить языки OCR «{lang}» из {tessdata_dir}.\n"
+                "Запустите .\\scripts\\download_tessdata.ps1"
             ) from exc
         raise OcrError(f"Tesseract error: {msg}") from exc
 
@@ -149,23 +266,25 @@ def ocr_image_to_text(
 def ocr_image_file(
     path: Path | str,
     *,
-    lang: str = "rus+eng",
+    lang: str = DEFAULT_OCR_LANG,
     max_side: int | None = None,
     psm: int = 3,
 ) -> tuple[str, dict[str, Any]]:
     """OCR a file on disk. Returns ``(plain_text, image_meta)``."""
     if not is_ocr_available():
         raise OcrError(
-            "Tesseract OCR не найден. Установите: "
-            "winget install --id UB-Mannheim.TesseractOCR -e "
-            "(языки Russian + English), либо задайте TESSERACT_CMD."
+            "Tesseract OCR не найден. Установите движок:\n"
+            "  winget install --id UB-Mannheim.TesseractOCR -e\n"
+            "Языковые модели rus+eng поставляются с MD-Converter (папка tessdata/)."
         )
     img, meta = load_image_for_ocr(path, max_side=max_side)
     text = ocr_image_to_text(img, lang=lang, psm=psm)
+    meta["ocr_lang"] = lang
+    meta["tessdata_dir"] = str(resolve_tessdata_dir())
     return text, meta
 
 
-def ocr_pixmap_to_text(pix, *, lang: str = "rus+eng") -> str:
+def ocr_pixmap_to_text(pix, *, lang: str = DEFAULT_OCR_LANG) -> str:
     """OCR a PyMuPDF Pixmap without writing temp files."""
     from io import BytesIO
 
@@ -202,8 +321,6 @@ def _normalize_ocr_text(text: str) -> str:
 
 def ocr_text_to_markdown(text: str) -> str:
     """Light structure pass over OCR plain text (lists + paragraphs)."""
-    import re
-
     if not text.strip():
         return ""
 

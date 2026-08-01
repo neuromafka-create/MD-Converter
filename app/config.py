@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 APP_NAME = "MD-Converter"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 WINDOW_TITLE = f"{APP_NAME} — DOCX/XLSX/PDF/PNG/JPG → Markdown"
 WINDOW_MIN_WIDTH = 920
 WINDOW_MIN_HEIGHT = 680
@@ -21,6 +21,6 @@ DEFAULT_OUTPUT_DIRNAME = "md_output"
 # PDF OCR (Tesseract): pages with fewer extractable chars trigger OCR in auto mode.
 OCR_MIN_CHARS_PER_PAGE = 40
 OCR_DPI = 200
-OCR_DEFAULT_LANG = "rus+eng"
+OCR_DEFAULT_LANG = "rus+eng"  # models live in project tessdata/ (not system-only eng)
 # Longest side of screenshots/scans before OCR (speed vs quality for 4K captures).
 OCR_IMAGE_MAX_SIDE = 3000

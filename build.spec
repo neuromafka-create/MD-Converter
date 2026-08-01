@@ -26,6 +26,12 @@ if _icon_ico.is_file():
 if _icon_png.is_file():
     datas.append((str(_icon_png), "assets"))
 
+# Bundled Tesseract language models (rus+eng) — required for Cyrillic OCR
+_tessdata = ROOT / "tessdata"
+if _tessdata.is_dir():
+    for _td in _tessdata.glob("*.traineddata"):
+        datas.append((str(_td), "tessdata"))
+
 a = Analysis(
     ["main.py"],
     pathex=[],

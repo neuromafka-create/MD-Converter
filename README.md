@@ -82,21 +82,39 @@ python main.py
 - **PNG / JPG / WEBP / BMP / TIFF** — всегда идут через OCR (это основной сценарий для методичек со скриншотов).
 - **PDF** — OCR только страниц почти без текстового слоя (*auto*), либо всех страниц (*force*).
 
-1. Установите Tesseract (сборка UB Mannheim, с языками **Russian** и **English**):
+#### 1. Движок Tesseract
+
+Нужен только **исполняемый файл** Tesseract (языки из winget **не обязательны**):
 
 ```powershell
 winget install --id UB-Mannheim.TesseractOCR -e
 ```
 
-2. При необходимости укажите путь вручную:
+При необходимости:
 
 ```powershell
 $env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
 ```
 
-3. В frontmatter:
-   - PDF: `ocr_pages`, `ocr_lang`
-   - изображения: `ocr: true`, `ocr_lang`, `width`, `height`
+> **Важно:** winget часто ставит Tesseract **только с English**. Без русского пакета кириллица превращается в «кракозябры» (`npodeccuokanbHbIii` вместо нормального текста).  
+> MD-Converter **вшивает** модели `rus` + `eng` в папку [`tessdata/`](tessdata/) и всегда передаёт их через `--tessdata-dir`.
+
+#### 2. Языковые модели (в проекте)
+
+Уже лежат в репозитории: `tessdata/rus.traineddata`, `tessdata/eng.traineddata` (tessdata_fast).
+
+Перекачать / обновить:
+
+```powershell
+.\scripts\download_tessdata.ps1
+# более точные (тяжелее):
+.\scripts\download_tessdata.ps1 -Best
+```
+
+#### 3. Frontmatter
+
+- PDF: `ocr_pages`, `ocr_lang`
+- изображения: `ocr: true`, `ocr_lang`, `width`, `height`
 
 Цифровые PDF с нормальным текстовым слоем OCR **не** запускают (быстро и без Tesseract).
 
@@ -167,7 +185,7 @@ pip install -r requirements.txt
 | Файл | Назначение |
 |------|------------|
 | `dist\MD-Converter.exe` | Portable-запуск без установки |
-| `dist\installer\MD-Converter-Setup-1.1.0.exe` | Инсталлятор для пользователей |
+| `dist\installer\MD-Converter-Setup-1.1.1.exe` | Инсталлятор для пользователей |
 
 Инсталлятор:
 
@@ -199,6 +217,7 @@ MD-Converter/
 ├── assets/
 │   ├── logo.png            # Логотип / иконка GUI
 │   └── logo.ico            # Иконка EXE и установщика
+├── tessdata/               # Вшитые модели Tesseract (rus + eng)
 ├── docs/
 │   └── screenshot.png      # Скриншот для README
 ├── installer/
@@ -226,7 +245,8 @@ MD-Converter/
 ## Ограничения
 
 - Нет legacy `.doc` / `.xls` (только Office Open XML и PDF)
-- OCR требует установленный **Tesseract** (не вшит в `.exe`); качество зависит от DPI/скана
+- OCR требует установленный **Tesseract** (движок); языки **rus+eng вшиты** в `tessdata/` и в portable `.exe`
+- Качество OCR зависит от DPI, шрифта и контраста скриншота
 - Сложные нумерации Word и экзотическая вёрстка PDF — best-effort
 - Нет LLM-суммаризации (только структурная конвертация)
 - Зашифрованные PDF без пустого пароля не открываются
