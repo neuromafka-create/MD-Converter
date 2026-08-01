@@ -12,7 +12,11 @@ Windows GUI-приложение для **пакетной** конвертац�
 
 ## Скриншот
 
-![MD-Converter — главное окно](docs/screenshot.png)
+<p align="center">
+  <img src="docs/screenshot.png" alt="MD-Converter v1.2.0 — главное окно" width="900">
+</p>
+
+*MD-Converter **v1.2.0** — пакетная конвертация DOCX / XLSX / PDF / PNG / JPG → Markdown, OCR для сканов и скриншотов.*
 
 ---
 
